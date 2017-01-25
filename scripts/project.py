@@ -1,3 +1,5 @@
+#-*- coding: utf-8 -*-
+
 import sys
 import numpy as np
 from scipy.stats import mode
@@ -6,6 +8,7 @@ from functools import lru_cache
 from matplotlib import cm
 from sklearn.metrics import classification_report, confusion_matrix
 
+import pdb
 
 import os  # funções utilitárias do sistema operacional
 
@@ -131,7 +134,7 @@ class KNN(object):
         # padrão
 
         zx, mu, sd = zscore(x)
-        kmeans = KMeans(n_clusters=6, n_init=10).fit(zx)
+        kmeans = KMeans(n_clusters=12, n_init=10).fit(zx)
 
         # guarda o centroide de cada cluster encontrado
         self.cluster_centers = kmeans.cluster_centers_*sd + mu
@@ -207,7 +210,7 @@ class KNN(object):
               (1) a inferencia dos dados
               (2) a probabilidade dos pontos classificados
         """
-
+        pdb.set_trace()
         dm = self._dist_matrix(x, self.cluster_centers)
 
         # Identifica quais são as k soluções mais próximas
@@ -296,7 +299,14 @@ def load_data(freqs_dir=None):
     return cldf, df
 
 
-def align_data(cldf, df):
+def load_file(filename):
+    sdf = pd.read_csv(filename, sep=',', header=None, names=['time', 'freq'])
+    sample = np.zeros(3000)
+    sample[sdf.time] = sdf.freq
+    return sample
+
+
+def align_data(df):
 
     # Remove o excesso de zeros
 
@@ -313,8 +323,12 @@ def align_data(cldf, df):
             end_j = j+min(10, df.shape[1]-j)
             break
 
-    df = df[:, start_j:end_j]
+    rdf = df[:, start_j:end_j]
 
+    return rdf
+
+
+def make_dataset(cldf, df, train_size=0.6):
     x_train = [] #df[chosen,:]
     y_train = [] #cldf[chosen]
 
@@ -326,7 +340,10 @@ def align_data(cldf, df):
     for shape in shapes:
         mask = cldf == shape
         indexes = np.arange(df.shape[0])[mask]
-        chosen = np.random.choice(indexes, replace=False, size=int(len(indexes)*0.6))
+        if len(indexes) == 0:
+            print("Pattern ", shape, " not present.")
+            continue
+        chosen = np.random.choice(indexes, replace=False, size=int(len(indexes)*train_size))
         test_chosen = [idx for idx in indexes if idx not in chosen]
 
         x_train.extend([df[i,:] for i in chosen])
@@ -344,10 +361,13 @@ def align_data(cldf, df):
     # TODO verificar se vai deixar assim, une hbar e vbar no mesmo conjunto
     # pois eles estavam gerando muitos falsos positivos
 
-    y_train[y_train == 'hbar'] = 'bar'
-    y_train[y_train == 'vbar'] = 'bar'
-    y_test[y_test == 'hbar'] = 'bar'
-    y_test[y_test == 'vbar'] = 'bar'
+    if len(y_train) > 0:
+        y_train[y_train == 'hbar'] = 'bar'
+        y_train[y_train == 'vbar'] = 'bar'
+
+    if len(y_test) > 0:
+        y_test[y_test == 'hbar'] = 'bar'
+        y_test[y_test == 'vbar'] = 'bar'
 
     print(x_test.shape)
 
@@ -390,7 +410,8 @@ def runtest(freqs_dir=None, window=None, step=1):
 
     labels, data = load_data(freqs_dir)
 
-    x_train, y_train, x_test, y_test = align_data(labels, data)
+    data = align_data(data)
+    x_train, y_train, x_test, y_test = make_dataset(labels, data)
 
     mww = window or int(x_train.shape[1] * 0.1)  # regra classica, usar 10% do tamanho do sinal
 
@@ -400,9 +421,8 @@ def runtest(freqs_dir=None, window=None, step=1):
     # Envia os dados de teste para serem classificados
     label, proba = algo.predict(x_test[::step])
 
-    df = pd.DataFrame(data=x_test, index=range(x_test.shape[0]), columns=['x_test'])
-    df.y_test = y_test
-    df.result = label
+    df = pd.DataFrame(data=y_test, index=range(len(y_test)), columns=['y_label'])
+    df.loc[:, 'y_pred'] = label
 
     ts = datetime.now().strftime("%Y%m%d%H%M%S")
     df.to_csv("results_%s.csv" % ts)
@@ -410,14 +430,51 @@ def runtest(freqs_dir=None, window=None, step=1):
     report(y_test, label, step=step)
 
 
+def run_one_test(freqs_dir, input, window=None, step=1):
+    from matplotlib import cm
+    from sklearn.metrics import classification_report, confusion_matrix
+
+    from datetime import datetime
+
+    filename, clabel = input.split(':')
+    target_data = load_file(filename)
+
+    labels, data = load_data(freqs_dir)
+
+    data = align_data(np.vstack([data, target_data]))
+    x_train, y_train, _, _ = make_dataset(labels, data[:-1,:], 1.)
+    _, _, x_test, y_test  = make_dataset(np.array([clabel]), data[-1,np.newaxis], 0.)
+
+    mww = window or int(x_train.shape[1] * 0.1)  # regra classica, usar 10% do tamanho do sinal
+
+    algo = KNN(n_neighbors=1, max_warping_window=mww)
+    algo.fit(x_train[::step], y_train[::step])
+
+    # Envia os dados de teste para serem classificados
+    label, proba = algo.predict(x_test[::step])
+
+    print(label, proba, "correct result is: ", clabel)
+
 if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser(description='Processsa  arquivos da camada II-III do NeuronalSys.')
     parser.add_argument('-w','--window', type=int, default=None,
-                        help='an integer for the accumulator')
+                        help='Tamanho da janela de deformação avaliada pelo DTW (warping window)')
     parser.add_argument('--load', type=str, default=None,
-                        help='sum the integers (default: find the max)')
+                        help='Carrega a analise da execução salva no arquivo informado.')
+    parser.add_argument('--dir', type=str, default=None,
+                    help='Diretório contendo os arquivos com as amostras para treinar e testar a rede (60% treino/40% teste).')
+    parser.add_argument('-i', '--input', type=str, default=None, help='Informa o arquivo com o objeto único para predição.')
 
     args = parser.parse_args()
-    runtest(args.load, window=args.window, step =3)
+
+    if args.load is None and args.dir is not None:
+        if args.input is None:
+            runtest(args.dir, window=args.window, step =1)
+        else:
+            run_one_test(args.dir, args.input, window=args.window, step =1)
+    else:
+        df = pd.read_csv(args.load)
+        report(df.loc[:,'y_label'], df.loc[:,'y_pred'].T, step=1)
+
