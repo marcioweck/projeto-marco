@@ -485,8 +485,13 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--input', type=str, default=None, help='Informa o arquivo com o objeto único para predição.')
     parser.add_argument('-c', '--clusters', type=int, default=8, help='Número de clusters formados pelo K-means (default 8).')
     parser.add_argument('-n', '--neighbors', type=int, default=3, help='Número de vizinhos considerados pelo KNN (default 3).')
+    parser.add_argument('-l', '--list-shapes', action='store_true', help='Lista o nome dos formatos suportados.')
 
     args = parser.parse_args()
+
+    if args.list_shapes:
+        print(shapes)
+        exit(0)
 
     if args.load is None and args.dir is not None:
         if args.input is None:
