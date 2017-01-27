@@ -106,10 +106,11 @@ class KNN(object):
         item is skipped. Implemented by x[:, ::subsample_step]
     """
 
-    def __init__(self, n_neighbors=5, max_warping_window=10000, subsample_step=1):
+    def __init__(self, n_neighbors=5, max_warping_window=10000, subsample_step=1, nlabels=8):
         self.n_neighbors = n_neighbors
         self.max_warping_window = max_warping_window
         self.subsample_step = subsample_step
+        self.nlabels = nlabels
 
     def fit(self, x, l):
         """Fit the model using x as training data and l as class labels
@@ -134,14 +135,21 @@ class KNN(object):
         # padrão
 
         zx, mu, sd = zscore(x)
-        kmeans = KMeans(n_clusters=12, n_init=10).fit(zx)
 
-        # guarda o centroide de cada cluster encontrado
-        self.cluster_centers = kmeans.cluster_centers_*sd + mu
-        n_clusters = len(self.cluster_centers)
-        # associa um label (squared, triangle...) a cada centroide
-        # buscando qual é o mais comum
-        self.cluster_labels = np.array([most_common(l[kmeans.labels_==i]) for i in range(n_clusters)])
+        for i in range(10):
+            kmeans = KMeans(n_clusters=self.nlabels, n_init=3).fit(zx)
+
+            # guarda o centroide de cada cluster encontrado
+            self.cluster_centers = kmeans.cluster_centers_*sd + mu
+            n_clusters = len(self.cluster_centers)
+            # associa um label (squared, triangle...) a cada centroide
+            # buscando qual é o mais comum
+            self.cluster_labels = np.array([most_common(l[kmeans.labels_==i]) for i in range(n_clusters)])
+
+            if len(set(self.cluster_labels)) >= len(shapes):
+                break
+        else:
+            print("Não foi possível detectar todos os padrões no Kmeans.")
 
     def _dist_matrix(self, x, y):
         """Calcula a matriz de distância M x N entre os dados de treinamento
@@ -210,19 +218,28 @@ class KNN(object):
               (1) a inferencia dos dados
               (2) a probabilidade dos pontos classificados
         """
-        pdb.set_trace()
         dm = self._dist_matrix(x, self.cluster_centers)
 
         # Identifica quais são as k soluções mais próximas
         knn_idx = dm.argsort()[:, :self.n_neighbors]
+        knn_dists = dm[np.arange(dm.shape[0])[:, None], knn_idx]
 
         # Identifica os grupos pelo tipo (ex: square, triangle ...)
         knn_labels = self.cluster_labels[knn_idx]
 
         # Model Label
-        mode_data = mode(knn_labels, axis=1)
-        mode_label = mode_data[0]
-        mode_proba = mode_data[1]/self.n_neighbors
+        # mode_data = mode(knn_labels, axis=1)
+        # mode_label = mode_data[0]
+        # mode_proba = mode_data[1]/self.n_neighbors
+        #
+        mode_calc = []
+        for pattern, dists in zip(knn_labels, knn_dists):
+            mode_calc.append([np.sum(dists[pattern == lb]) for lb in pattern])
+
+        mode_data = np.array(mode_calc)
+        mode_idx = np.argmin(mode_data, axis=1)
+        mode_proba = 1 - mode_data[np.arange(mode_data.shape[0])[:, None], mode_idx]/np.sum(mode_data, axis=1)
+        mode_label = knn_labels[np.arange(knn_labels.shape[0]), mode_idx]
 
         return mode_label.ravel(), mode_proba.ravel()
 
@@ -361,13 +378,13 @@ def make_dataset(cldf, df, train_size=0.6):
     # TODO verificar se vai deixar assim, une hbar e vbar no mesmo conjunto
     # pois eles estavam gerando muitos falsos positivos
 
-    if len(y_train) > 0:
-        y_train[y_train == 'hbar'] = 'bar'
-        y_train[y_train == 'vbar'] = 'bar'
+    # if len(y_train) > 0:
+    #     y_train[y_train == 'hbar'] = 'bar'
+    #     y_train[y_train == 'vbar'] = 'bar'
 
-    if len(y_test) > 0:
-        y_test[y_test == 'hbar'] = 'bar'
-        y_test[y_test == 'vbar'] = 'bar'
+    # if len(y_test) > 0:
+    #     y_test[y_test == 'hbar'] = 'bar'
+    #     y_test[y_test == 'vbar'] = 'bar'
 
     print(x_test.shape)
 
@@ -378,7 +395,7 @@ def report(y_test, label, step=1):
 
     print (classification_report(y_test[::step], label))
 
-    used_labels = ['square', 'triangle', 'bar']
+    used_labels = shapes #['square', 'triangle', 'bar']
     nused = len(used_labels)
     conf_mat = confusion_matrix(y_test[::step], label, labels=used_labels)
 
@@ -402,7 +419,7 @@ def report(y_test, label, step=1):
     plt.show()
 
 
-def runtest(freqs_dir=None, window=None, step=1):
+def runtest(freqs_dir=None, window=None, step=1, kclusters=8, neighbors=3):
     from matplotlib import cm
     from sklearn.metrics import classification_report, confusion_matrix
 
@@ -415,7 +432,7 @@ def runtest(freqs_dir=None, window=None, step=1):
 
     mww = window or int(x_train.shape[1] * 0.1)  # regra classica, usar 10% do tamanho do sinal
 
-    algo = KNN(n_neighbors=1, max_warping_window=mww)
+    algo = KNN(n_neighbors=neighbors, max_warping_window=mww, nlabels=kclusters)
     algo.fit(x_train[::step], y_train[::step])
 
     # Envia os dados de teste para serem classificados
@@ -430,7 +447,7 @@ def runtest(freqs_dir=None, window=None, step=1):
     report(y_test, label, step=step)
 
 
-def run_one_test(freqs_dir, input, window=None, step=1):
+def run_one_test(freqs_dir, input, window=None, step=1, kclusters=8, neighbors=3):
     from matplotlib import cm
     from sklearn.metrics import classification_report, confusion_matrix
 
@@ -447,7 +464,7 @@ def run_one_test(freqs_dir, input, window=None, step=1):
 
     mww = window or int(x_train.shape[1] * 0.1)  # regra classica, usar 10% do tamanho do sinal
 
-    algo = KNN(n_neighbors=1, max_warping_window=mww)
+    algo = KNN(n_neighbors=neighbors, max_warping_window=mww, nlabels=kclusters)
     algo.fit(x_train[::step], y_train[::step])
 
     # Envia os dados de teste para serem classificados
@@ -466,14 +483,16 @@ if __name__ == '__main__':
     parser.add_argument('--dir', type=str, default=None,
                     help='Diretório contendo os arquivos com as amostras para treinar e testar a rede (60% treino/40% teste).')
     parser.add_argument('-i', '--input', type=str, default=None, help='Informa o arquivo com o objeto único para predição.')
+    parser.add_argument('-c', '--clusters', type=int, default=8, help='Número de clusters formados pelo K-means (default 8).')
+    parser.add_argument('-n', '--neighbors', type=int, default=3, help='Número de vizinhos considerados pelo KNN (default 3).')
 
     args = parser.parse_args()
 
     if args.load is None and args.dir is not None:
         if args.input is None:
-            runtest(args.dir, window=args.window, step =1)
+            runtest(args.dir, window=args.window, step =1, kclusters=args.clusters, neighbors=args.neighbors)
         else:
-            run_one_test(args.dir, args.input, window=args.window, step =1)
+            run_one_test(args.dir, args.input, window=args.window, step =1, kclusters=args.clusters, neighbors=args.neighbors)
     else:
         df = pd.read_csv(args.load)
         report(df.loc[:,'y_label'], df.loc[:,'y_pred'].T, step=1)
