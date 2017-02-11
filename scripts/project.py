@@ -5,10 +5,11 @@ import numpy as np
 from scipy.stats import mode
 from scipy.spatial.distance import squareform  # coloca no formato de matriz
 from functools import lru_cache
+import matplotlib.pyplot as plt
 from matplotlib import cm
 from sklearn.metrics import classification_report, confusion_matrix
 
-import pdb
+from plotter import plot_shape
 
 import os  # funções utilitárias do sistema operacional
 
@@ -316,7 +317,13 @@ def load_data(freqs_dir=None):
     return cldf, df
 
 
-def load_file(filename):
+def load_file(filename, do_plot=False):
+    if do_plot:
+        _, tail = os.path.split(r""+filename)
+        print(tail)
+        plot_shape(tail, area='40x40')
+        plt.show(block=False)
+
     sdf = pd.read_csv(filename, sep=',', header=None, names=['time', 'freq'])
     sample = np.zeros(3000)
     sample[sdf.time] = sdf.freq
@@ -447,14 +454,14 @@ def runtest(freqs_dir=None, window=None, step=1, kclusters=8, neighbors=3):
     report(y_test, label, step=step)
 
 
-def run_one_test(freqs_dir, input, window=None, step=1, kclusters=8, neighbors=3):
+def run_one_test(freqs_dir, input, window=None, step=1, kclusters=8, neighbors=3, do_plot=False):
     from matplotlib import cm
     from sklearn.metrics import classification_report, confusion_matrix
 
     from datetime import datetime
 
     filename, clabel = input.split(':')
-    target_data = load_file(filename)
+    target_data = load_file(filename, do_plot)
 
     labels, data = load_data(freqs_dir)
 
@@ -486,6 +493,8 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--clusters', type=int, default=8, help='Número de clusters formados pelo K-means (default 8).')
     parser.add_argument('-n', '--neighbors', type=int, default=3, help='Número de vizinhos considerados pelo KNN (default 3).')
     parser.add_argument('-l', '--list-shapes', action='store_true', help='Lista o nome dos formatos suportados.')
+    parser.add_argument('--plot', action='store_true', help='Desenha o formato do arquivo de teste.')
+
 
     args = parser.parse_args()
 
@@ -497,7 +506,8 @@ if __name__ == '__main__':
         if args.input is None:
             runtest(args.dir, window=args.window, step =1, kclusters=args.clusters, neighbors=args.neighbors)
         else:
-            run_one_test(args.dir, args.input, window=args.window, step =1, kclusters=args.clusters, neighbors=args.neighbors)
+            run_one_test(args.dir, args.input, window=args.window, step =1,
+                         kclusters=args.clusters, neighbors=args.neighbors, do_plot=args.plot)
     else:
         df = pd.read_csv(args.load)
         report(df.loc[:,'y_label'], df.loc[:,'y_pred'].T, step=1)

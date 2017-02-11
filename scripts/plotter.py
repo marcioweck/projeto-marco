@@ -89,9 +89,6 @@ def plot_shape(filename, area="40x40"):
     
     plt.scatter(X, Y, c='k', alpha=0.7)
 
-    plt.show()
-
-
 if __name__ == "__main__":
     import argparse
 
@@ -103,5 +100,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     plot_shape(args.file, args.area)
-
+    plt.show()
 
