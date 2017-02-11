@@ -493,7 +493,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--clusters', type=int, default=8, help='Número de clusters formados pelo K-means (default 8).')
     parser.add_argument('-n', '--neighbors', type=int, default=3, help='Número de vizinhos considerados pelo KNN (default 3).')
     parser.add_argument('-l', '--list-shapes', action='store_true', help='Lista o nome dos formatos suportados.')
-    parser.add_argument('--plot', action='store_true', help='Desenha o formato do arquivo de teste.')
+    parser.add_argument('--plot', action='store_true', help='Plota o formato do arquivo de teste (input).')
 
 
     args = parser.parse_args()
