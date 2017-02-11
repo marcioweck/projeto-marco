@@ -74,6 +74,24 @@ def parse_file(ax, filename, dimensions):
     except Exception as e:
         print("File cannot be parsed correctly.", e)
 
+
+def plot_shape(filename, area="40x40"):
+    a, b = parse_area(area)
+
+    fig1 = plt.figure()
+    ax1 = fig1.add_subplot(111, aspect='equal')
+
+    ax2 = draw_rect(ax1, (0,0), a/float(a),a/float(a))
+
+    ax3 = parse_file(ax2, filename, (a,b))
+                                      
+    Y, X = np.mgrid[0:1:a/100., 0:1:b/100.]
+    
+    plt.scatter(X, Y, c='k', alpha=0.7)
+
+    plt.show()
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -84,21 +102,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    a, b = parse_area(args.area)
-
-    fig1 = plt.figure()
-    ax1 = fig1.add_subplot(111, aspect='equal')
-
-    ax2 = draw_rect(ax1, (0,0), a/float(a),a/float(a))
-
-    ax3 = parse_file(ax2, args.file, (a,b))
-                                      
-    Y, X = np.mgrid[0:1:a/100., 0:1:b/100.]
-    
-    plt.scatter(X, Y, c='k', alpha=0.7)
-
-    plt.show()
-
-
+    plot_shape(args.file, args.area)
 
 
